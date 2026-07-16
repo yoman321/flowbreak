@@ -1,4 +1,6 @@
-# System Design Sandbox
+# Flowbreak
+
+*Learn system design by breaking the flow.*
 
 A proof of concept for learning message queues through a deterministic traffic-spike simulation.
 

@@ -77,7 +77,7 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#">SYSTEM <span>DESIGN</span> SANDBOX</a>
+        <a className="brand" href="#">FLOW<span>BREAK</span></a>
         <div className="level-pill"><i /> LEVEL 01 · TRAFFIC SPIKE</div>
         <button className="ghost">How it works</button>
       </header>

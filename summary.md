@@ -113,6 +113,7 @@ The simulation is real browser code, not the LLM pretending to be a simulator. T
 ### V1 implementation decisions
 
 - Build a **guided architecture builder**, not a free-form whiteboard. Users place and connect a constrained component kit: **client/API, backend service, queue, worker pool, database, and external API**.
+- Architecture objects use direct manipulation: users drag components from the tray onto the canvas and drag canvas nodes to reposition them. Avoid click-only placement.
 - A solution is a validated graph of component types, settings, and allowed directed connections. The simulation runs in the browser and models routing, capacity, queue backlog, retries, dropped work, latency, and downstream throttling.
 - Score the factual outcome, **not an expected topology**. Multiple designs and action sequences may succeed if they satisfy the level's measurable rules.
 - Each completed run records pass/fail, maximum backlog, dropped jobs, average and peak latency, processed jobs, retries, rate-limit violations, component utilization, and key timeline events.
@@ -134,6 +135,12 @@ User opens level → show static scenario intro (0 calls)
 1. Build the **shared sandbox engine** once.
 2. Build the **traffic-spike queue level end-to-end**: builder, graph validation, simulation, scoring, persistence, static feedback, and optional debrief.
 3. Only then, if time remains, add the other three queue levels.
+
+### Current proof-of-concept status
+
+- The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides the Traffic Spike page, draggable nodes, worker and burst controls, metric feedback, and temporary `/api/simulate` and `/api/solutions` endpoints.
+- The current endpoints are placeholders, not the final architecture. Firebase Authentication/Firestore, graph connections and validation, immutable persisted snapshots, and the shared browser-side tick simulation remain the next implementation work.
+- The prototype makes no LLM calls.
 
 ---
 
