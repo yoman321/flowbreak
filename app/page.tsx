@@ -1,7 +1,7 @@
 const levels = [
   { number: "00", title: "Tutorial", detail: "Build your first request flow.", href: "/tutorial", state: "AVAILABLE" },
   { number: "01", title: "Background Delivery", detail: "Keep slow follower delivery off the request path.", href: "/background-delivery", state: "AVAILABLE" },
-  { number: "03", title: "Traffic Spike", detail: "Protect workers from a burst.", href: "/traffic-spike", state: "AVAILABLE" },
+  { number: "02", title: "Traffic Spike", detail: "Keep a burst safe while work drains.", href: "/traffic-spike", state: "AVAILABLE" },
 ];
 
 export default function LevelSelect() {

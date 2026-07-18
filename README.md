@@ -12,11 +12,10 @@ npm run dev
 npm run test
 ```
 
-Open [http://localhost:3000](http://localhost:3000) to choose a level. Level 01 uses a deterministic browser simulation to show an API acknowledging a post while a worker completes follower delivery in the background.
+Open [http://localhost:3000](http://localhost:3000) to choose a level. Level 01 shows an API acknowledging a post while a worker completes follower delivery in the background. Level 02 simulates a 500-job burst: a bounded queue preserves waiting jobs while every worker handles one job at a time.
 
 ## API routes
 
-- `POST /api/simulate` — Traffic Spike POC endpoint that accepts `{ workers, queue, burst, apiLimit?, clientConnected? }` and returns deterministic outcome metrics.
 - `POST /api/solutions` — accepts a solution snapshot with a versioned graph (`nodes` plus directed port-to-port `edges`) and returns a POC save receipt. Swap this endpoint for Firebase/Firestore once auth is added.
 
 ## Attribution

@@ -2,7 +2,7 @@
 
 ## Project overview
 
-**Flowbreak** is an interactive, challenge-driven way to learn system-design primitives by consequence. Its product line is: *Learn system design by breaking the flow.* Its first challenge is **Background Delivery**, where a user moves slow work to a worker; **Traffic Spike** is Level 03 and builds on that path.
+**Flowbreak** is an interactive, challenge-driven way to learn system-design primitives by consequence. Its product line is: *Learn system design by breaking the flow.* Its first challenge is **Background Delivery**, where a user moves slow work to a worker; **Traffic Spike** is Level 02 and builds on that path.
 
 The product teaches intuition through a playable simulation—not an LLM pretending to simulate a system. The user may choose several valid architectures; evaluate the measurable outcome, never a single expected topology.
 
@@ -57,13 +57,14 @@ app/
   lib/architecture/graph.ts # serializable graph snapshot and directed port-edge operations
   lib/architecture/graph.test.ts # graph invariants and concrete-node hydration tests
   lib/architecture/use-architecture-graph.ts # React state bridge for the shared architecture graph
+  lib/simulations/traffic-spike.ts # deterministic browser-only Level 02 queue and serial-worker simulation
+  lib/simulations/traffic-spike.test.ts # Level 02 capacity, backlog, and response simulation tests
   background-delivery/page.tsx # Level 01 async worker challenge, browser-only delivery simulation
   page.tsx                 # root level-selection panel
-  traffic-spike/page.tsx   # Level 03 Traffic Spike builder, client simulation interaction, metrics UI
+  traffic-spike/page.tsx   # Level 02 Traffic Spike builder, browser-only queue simulation, and metrics UI
   tutorial/page.tsx        # Level 00 interactive practice builder with a restricted core component kit
   globals.css              # Mission Control visual system
   layout.tsx               # app shell and metadata
-  api/simulate/route.ts    # deterministic POC simulation endpoint
   api/solutions/route.ts   # POC solution-save endpoint; replace with authenticated Firestore later
 summary.md                 # product brief and living decision log
 README.md                  # setup, API, and attribution notes
@@ -84,12 +85,12 @@ README.md                  # setup, API, and attribution notes
 - Every client-originating request needs an explicit API-to-Client response edge. Level validation must reject request flows that leave the client without a response. Response edges render green; responses are never draggable components.
 - While a canvas node is dragged, show the shared bottom-of-canvas trash target. Dropping a node there removes it and every incident connection; it must not appear for tray items or connection drags.
 - All placed canvas nodes use the shared canvas-node component. After one second of hover, it shows an attributed role description plus component-specific live settings and inbound/outbound connection counts; never show prior run-result metrics in this card.
-- Every builder level composes the shared component-tray, architecture-canvas, mission-control-panel, and objective-checklist modules. Every objective list shows all high-level outcomes from the start; do not expose solution topology, numeric targets, or the lower-level changes required to finish one.
+- Every builder level composes the shared component-tray, architecture-canvas, mission-control-panel, and objective-checklist modules. Mission Control contains only learning guidance and high-level objectives; never render prior-run metrics or live metric grids there. Every objective list shows all high-level outcomes from the start; do not expose solution topology, numeric targets, or the lower-level changes required to finish one. Verified outcome metrics belong only in the Run Result modal.
 - Every builder level uses the shared architecture-header for its canvas title and Run control. After an actual run, it shows a green check or red cross icon that reopens the saved, verified last-run result modal.
 - Every level opens with the shared level-intro-modal before the learner can interact. It explains the high-level problem and normal approach without revealing the exact graph solution, and links to the System Design Primer source.
 - All level outcomes use the shared run-result-modal component. It opens immediately after a run and receives only verified level facts; level-specific actions such as saving or advancing are supplied by the level.
 - The starter graph is the only preconnected setup. Every component-tray drop adds a separate, unconnected node instance, and users may add any number of instances.
-- Level 02 Direct Capacity is planned next: it reuses Background Delivery's graph without a queue, accepts only three immediate direct jobs per Worker node, and teaches worker scaling through dropped concurrent requests. Level 03 Traffic Spike then reuses that architecture and introduces queue buffering for a 100-request burst. Do not add caching or load-balancer levels in v1.
+- Level 02 Traffic Spike reuses Background Delivery's direct worker route and introduces queue buffering. Its fixed 500-job burst fits the API and bounded queue, while every Worker Pool node processes exactly one job at a time at one job per simulated second. Without a queue, the starter's single worker can begin one job and the remaining 499 receive `503`; a complete `API → Queue → Worker → Database` path retains all jobs, returns `202`, and drains them. The fixed figures are Flowbreak rules, not a Primer prescription. Do not add caching or load-balancer levels in v1.
 - Score factual results, not diagram similarity. Multiple configurations can pass if they meet the level’s rules.
 - Required runtime LLM calls: **zero**. Static intros and metric-driven feedback are preferred. An LLM debrief is optional only after a completed run, must use verified metrics, cannot decide pass/fail, and must be cached per identical solution snapshot.
 - Keep user data owner-scoped once Firebase is connected; verify Firebase auth on the server before reading or writing private records.

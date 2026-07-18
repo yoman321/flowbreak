@@ -11,20 +11,24 @@ import { MissionControlPanel } from "../components/mission-control-panel";
 import { RunResultModal } from "../components/run-result-modal";
 import { ArchitectureGraph, createGraphSnapshot } from "../lib/architecture/graph";
 import { ArchitectureNode, NodeKind, NodePresentation } from "../lib/architecture/nodes";
+import {
+  API_BURST_CAPACITY,
+  QUEUE_CAPACITY,
+  TRAFFIC_SPIKE_BURST,
+  TrafficSpikeResult,
+  evaluateTrafficSpike,
+  getTrafficSpikeTopology,
+} from "../lib/simulations/traffic-spike";
 import { useArchitectureGraph } from "../lib/architecture/use-architecture-graph";
 
-type Result = {
-  passed: boolean; processed: number; dropped: number; maxBacklog: number;
-  averageLatencyMs: number; acceptedResponses: number; rejectedResponses: number; clientResponses: number; unansweredRequests: number; feedback: string;
-};
 type TrafficNodeKind = "client" | "api" | "queue" | "workers" | "db";
 
 const components: Array<{ kind: TrafficNodeKind; icon: string; name: string; detail: string }> = [
-  { kind: "client", icon: "◎", name: "Client", detail: "Starts traffic" },
-  { kind: "api", icon: "◈", name: "API service", detail: "Accepts burst requests" },
-  { kind: "queue", icon: "≋", name: "Queue", detail: "Buffers burst traffic" },
-  { kind: "workers", icon: "⚙", name: "Worker pool", detail: "Drains queued work" },
-  { kind: "db", icon: "▣", name: "Database", detail: "Persists processed jobs" },
+  { kind: "client", icon: "◎", name: "Client", detail: "Starts the 500-job burst" },
+  { kind: "api", icon: "◈", name: "API service", detail: "Receives the burst" },
+  { kind: "queue", icon: "≋", name: "Queue", detail: "Retains waiting jobs" },
+  { kind: "workers", icon: "⚙", name: "Worker pool", detail: "Processes one job at a time" },
+  { kind: "db", icon: "▣", name: "Database", detail: "Persists completed jobs" },
 ];
 
 const starterGraph = createGraphSnapshot([
@@ -43,7 +47,7 @@ const nodeDescriptions: Record<TrafficNodeKind, { description: string; sourceSec
   client: { description: "A client begins the interaction with a system by sending a request and receiving a response.", sourceSection: "HTTP · System Design Primer" },
   api: { description: "An API service receives client requests, applies application logic or routing, and sends work to the next component.", sourceSection: "Application layer · System Design Primer" },
   queue: { description: "A queue receives, holds, and delivers messages so producers and workers can operate at different rates.", sourceSection: "Asynchronism · System Design Primer" },
-  workers: { description: "A worker pool processes work outside the request path and can scale its processing capacity with more workers.", sourceSection: "Asynchronism · System Design Primer" },
+  workers: { description: "Workers enable asynchronous work outside the request path. Each worker in this level takes only one job at a time.", sourceSection: "Asynchronism · System Design Primer" },
   db: { description: "A database is the durable data store where an application reads and writes its records.", sourceSection: "Database · System Design Primer" },
 };
 
@@ -51,66 +55,69 @@ function isTrafficNodeKind(kind: NodeKind): kind is TrafficNodeKind {
   return kind === "client" || kind === "api" || kind === "queue" || kind === "workers" || kind === "db";
 }
 
-function trafficNodeTooltip(node: ArchitectureNode, graph: ArchitectureGraph, burst: number, workers: number, apiLimitEnabled: boolean, apiLimit: number, queueIsInFlow: boolean): CanvasNodeTooltip {
+function trafficNodeTooltip(node: ArchitectureNode, graph: ArchitectureGraph): CanvasNodeTooltip {
   const description = nodeDescriptions[node.kind as TrafficNodeKind];
+  const topology = getTrafficSpikeTopology(graph);
   const liveStat = node.kind === "client"
-    ? { label: "BURST", value: `${burst} jobs` }
+    ? { label: "BURST", value: `${TRAFFIC_SPIKE_BURST} jobs` }
     : node.kind === "api"
-      ? { label: "INTAKE", value: apiLimitEnabled ? `${apiLimit} req/s` : "OPEN" }
+      ? { label: "INTAKE", value: `${API_BURST_CAPACITY} jobs / burst` }
       : node.kind === "queue"
-        ? { label: "BUFFER", value: queueIsInFlow ? "IN FLOW" : "NOT IN FLOW", tone: queueIsInFlow ? "green" as const : "amber" as const }
+        ? { label: "STORAGE", value: `${QUEUE_CAPACITY} jobs` }
         : node.kind === "workers"
-          ? { label: "CAPACITY", value: `${workers} × 100 jobs/s` }
+          ? { label: "CONCURRENCY", value: "1 job" }
           : { label: "STORAGE", value: "PERSISTENT" };
+
   return {
     description: description.description,
     sourceSection: description.sourceSection,
-    stats: [liveStat, { label: "CONNECTIONS", value: `${graph.incoming(node.id).length} IN · ${graph.outgoing(node.id).length} OUT` }],
+    stats: [
+      liveStat,
+      { label: "CONNECTIONS", value: `${graph.incoming(node.id).length} IN · ${graph.outgoing(node.id).length} OUT` },
+      ...(node.kind === "queue" ? [{ label: "ROUTE", value: topology.queueInFlow ? "RETENTION ACTIVE" : "NOT IN FLOW", tone: topology.queueInFlow ? "green" as const : "amber" as const }] : []),
+    ],
   };
 }
 
-function presentationFor(node: ArchitectureNode, burst: number, workers: number, apiLimitEnabled: boolean, apiLimit: number): NodePresentation {
+function presentationFor(node: ArchitectureNode, result: TrafficSpikeResult | null): NodePresentation {
   const component = components.find((candidate) => candidate.kind === node.kind)!;
   return {
     icon: component.icon,
     label: component.name,
     detail: node.kind === "client"
-      ? `${burst} jobs arrive`
-      : node.kind === "workers"
-        ? `${workers} × 100 jobs/s`
-        : node.kind === "api" && apiLimitEnabled
-          ? `${apiLimit} req/s intake limit`
-          : component.detail,
+      ? `${TRAFFIC_SPIKE_BURST} jobs arrive`
+      : node.kind === "api"
+        ? `${API_BURST_CAPACITY} jobs / burst`
+        : node.kind === "workers"
+          ? "1 job at a time"
+          : node.kind === "queue" && result?.queueInFlow
+            ? `${result.maxBacklog} jobs waiting`
+            : component.detail,
   };
+}
+
+function formatDuration(durationMs: number) {
+  return durationMs ? `${durationMs / 1000} sec` : "—";
+}
+
+function formatClock(durationMs: number) {
+  const totalSeconds = Math.round(durationMs / 1000);
+  return `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:${String(totalSeconds % 60).padStart(2, "0")}`;
 }
 
 export default function TrafficSpike() {
   const { graph, snapshot, addNode, moveNode, connect, removeEdge, removeNode } = useArchitectureGraph(starterGraph);
-  const [workers, setWorkers] = useState(1);
-  const [burst, setBurst] = useState(500);
-  const [apiLimitEnabled, setApiLimitEnabled] = useState(false);
-  const [apiLimit, setApiLimit] = useState(100);
   const [running, setRunning] = useState(false);
-  const [result, setResult] = useState<Result | null>(null);
+  const [result, setResult] = useState<TrafficSpikeResult | null>(null);
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [introOpen, setIntroOpen] = useState(true);
   const [saved, setSaved] = useState(false);
-  const clientRequestConnected = graph.hasKindConnection("client", "api");
-  const clientResponseConnected = graph.hasKindConnection("api", "client");
-  const queueIsInFlow = clientRequestConnected
-    && clientResponseConnected
-    && graph.hasKindConnection("api", "queue")
-    && graph.hasKindConnection("queue", "workers")
-    && graph.hasKindConnection("workers", "db")
-    && !graph.edges.some((edge) => graph.getNode(edge.source.nodeId)?.kind === "client" && graph.getNode(edge.target.nodeId)?.kind !== "api")
-    && !graph.edges.some((edge) => graph.getNode(edge.source.nodeId)?.kind === "api" && graph.getNode(edge.target.nodeId)?.kind !== "queue" && graph.getNode(edge.target.nodeId)?.kind !== "client");
-  const workerBottleneckResolved = queueIsInFlow && workers >= 3;
-  const apiLimitResolved = !apiLimitEnabled || apiLimit >= burst;
-  const apiIntakeObjectiveResolved = apiLimitEnabled && apiLimitResolved;
-  const trafficObjectives = [
-    { title: "1 · Decouple the burst", done: queueIsInFlow, active: !queueIsInFlow },
-    { title: "2 · Increase processing capacity", done: workerBottleneckResolved, active: queueIsInFlow && !workerBottleneckResolved },
-    { title: "3 · Handle API intake capacity", done: apiIntakeObjectiveResolved, active: workerBottleneckResolved && !apiIntakeObjectiveResolved },
+  const topology = getTrafficSpikeTopology(graph);
+  const clientConnected = topology.clientRequestConnected && topology.clientResponseConnected;
+  const objectives = [
+    { title: "1 · Respond to the burst", done: clientConnected, active: !clientConnected },
+    { title: "2 · Preserve waiting work", done: topology.queueInFlow, active: clientConnected && !topology.queueInFlow },
+    { title: "3 · Drain every job safely", done: topology.queueInFlow && topology.queueWorkerCount > 0, active: topology.queueInFlow && topology.queueWorkerCount === 0 },
   ];
 
   async function runSimulation() {
@@ -118,12 +125,7 @@ export default function TrafficSpike() {
     setSaved(false);
     setResult(null);
     await new Promise((resolve) => setTimeout(resolve, 650));
-    const response = await fetch("/api/simulate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ workers, queue: queueIsInFlow, burst, apiLimit: apiLimitEnabled ? apiLimit : undefined, clientConnected: clientRequestConnected && clientResponseConnected }),
-    });
-    setResult(await response.json() as Result);
+    setResult(evaluateTrafficSpike(graph));
     setRunReportOpen(true);
     setRunning(false);
   }
@@ -132,42 +134,52 @@ export default function TrafficSpike() {
     await fetch("/api/solutions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ level: "traffic-spike", graph: snapshot, workers, burst, apiLimit: apiLimitEnabled ? apiLimit : null, result }),
+      body: JSON.stringify({
+        level: "traffic-spike",
+        graph: snapshot,
+        burst: TRAFFIC_SPIKE_BURST,
+        apiBurstCapacity: API_BURST_CAPACITY,
+        workerCount: topology.queueWorkerCount || topology.directWorkerCount,
+        result,
+      }),
     });
     setSaved(true);
   }
 
+  const timeline = running
+    ? "00:00 — API receiving the burst…"
+    : result?.unansweredRequests
+      ? `00:00 — Client received no response for ${result.unansweredRequests} jobs`
+      : result?.passed
+        ? `00:00 — ${result.acceptedResponses} jobs received 202 Accepted · ${formatClock(result.drainDurationMs)} — final queued job completed`
+        : result
+          ? `00:00 — ${result.acceptedResponses} accepted · ${result.rejectedResponses} rejected because there was nowhere safe to wait`
+          : "00:00 — A 500-job burst is ready. Decide where waiting work belongs.";
+
   return <main>
     <header className="topbar">
       <a className="brand" href="/">FLOW<span>BREAK</span></a>
-      <div className="level-pill"><i /> LEVEL 03 · TRAFFIC SPIKE</div>
+      <div className="level-pill"><i /> LEVEL 02 · TRAFFIC SPIKE</div>
       <a className="ghost" href="/">LEVEL SELECT</a>
     </header>
 
     <section className="workspace">
-      <ComponentTray title="Build a path" description="Work through the checkpoints: buffer the burst, clear worker capacity, then test API intake capacity. Every tray drop adds an unconnected node. Drag from any node-side port to route data; click a flow line to disconnect it.">
+      <ComponentTray title="Protect waiting jobs" description="A 500-job burst reaches the API at once. Each worker can only process one job at a time, so waiting work needs somewhere safe to remain.">
         <div className="component-list">
           {components.map((component) => <div key={component.kind} className="component draggable-component" draggable onDragStart={(event) => startTrayNodeDrag(event, component.kind)}>
-            <b>{component.icon}</b><span>{component.name}<small>Drag to add an unconnected node</small></span>
+            <b>{component.icon}</b><span>{component.name}<small>{component.detail} · drag to add</small></span>
           </div>)}
-        </div>
-        <div className="control-block">
-          <label>WORKER INSTANCES <strong>{workers}</strong></label>
-          <input aria-label="Worker instances" type="range" min="1" max="6" value={workers} onChange={(event) => setWorkers(Number(event.target.value))} />
-          {apiLimitEnabled && <><label>API INTAKE LIMIT <strong>{apiLimit} req/s</strong></label><input aria-label="API intake limit" type="range" min="100" max="1000" step="100" value={apiLimit} onChange={(event) => setApiLimit(Number(event.target.value))} /></>}
-          <label>BURST SIZE <strong>{burst} jobs</strong></label>
-          <input aria-label="Burst size" type="range" min="200" max="1000" step="100" value={burst} onChange={(event) => setBurst(Number(event.target.value))} />
         </div>
       </ComponentTray>
 
-      <ArchitectureCanvas header={<ArchitectureHeader title="Buffer the burst before workers break" runLabel="RUN TRAFFIC SPIKE" onRun={runSimulation} onShowLastRun={result ? () => setRunReportOpen(true) : undefined} running={running} passed={result?.passed ?? null} />}>
+      <ArchitectureCanvas header={<ArchitectureHeader title="Keep jobs safe while work is in progress" runLabel="RUN TRAFFIC SPIKE" onRun={runSimulation} onShowLastRun={result ? () => setRunReportOpen(true) : undefined} running={running} passed={result?.passed ?? null} />}>
         <ArchitectureGraphCanvas
           graph={graph}
           markerPrefix="traffic"
-          note={!clientResponseConnected ? "The API needs a return edge to the Client." : !queueIsInFlow ? "The burst still reaches a bottleneck. Rework the flow." : workers < 3 ? "The next bottleneck is processing capacity." : apiLimitEnabled && !apiLimitResolved ? "A new intake constraint is active." : "The API queues the burst while workers process it safely."}
-          nodePresentation={(node) => presentationFor(node, burst, workers, apiLimitEnabled, apiLimit)}
-          nodeTooltip={(node, currentGraph) => trafficNodeTooltip(node, currentGraph, burst, workers, apiLimitEnabled, apiLimit, queueIsInFlow)}
-          nodeResponse={(node) => node.kind === "client" && result ? result.unansweredRequests ? { label: "NO RESPONSE RECEIVED", detail: `${result.unansweredRequests} requests are unanswered`, tone: "failure" } : result.rejectedResponses ? { label: "RESPONSES RECEIVED", detail: `${result.acceptedResponses} accepted · ${result.rejectedResponses} rejected`, tone: "failure" } : { label: "202 ACCEPTED RECEIVED", detail: `${result.acceptedResponses} requests acknowledged` } : undefined}
+          note={!clientConnected ? "The Client needs a request edge and an API response edge." : !topology.queueInFlow ? "A worker is busy after starting one job. Where should the remaining work wait?" : "The queue retains waiting jobs while each worker completes them one at a time."}
+          nodePresentation={(node) => presentationFor(node, result)}
+          nodeTooltip={trafficNodeTooltip}
+          nodeResponse={(node) => node.kind === "client" && result ? result.unansweredRequests ? { label: "NO RESPONSE RECEIVED", detail: `${result.unansweredRequests} jobs are unanswered`, tone: "failure" } : result.rejectedResponses ? { label: "SOME JOBS REJECTED", detail: `${result.acceptedResponses} accepted · ${result.rejectedResponses} rejected`, tone: "failure" } : { label: "202 ACCEPTED RECEIVED", detail: `${result.acceptedResponses} jobs acknowledged` } : undefined}
           onAddNode={(kind, position) => { if (isTrafficNodeKind(kind)) addNode(kind, position); }}
           onMoveNode={moveNode}
           onConnect={connect}
@@ -176,39 +188,30 @@ export default function TrafficSpike() {
         />
       </ArchitectureCanvas>
 
-      <MissionControlPanel title="How do you protect workers from a burst?" description="A 500-job burst arrives in one second. First decouple the API from workers, then resolve each new bottleneck as it appears." objectives={trafficObjectives} objectivesLabel="Traffic Spike objectives">
-        <div className="goal"><span>SUCCESS CRITERIA</span><b>Build a safe route, then clear every active bottleneck.</b></div>
-        {workerBottleneckResolved && !apiLimitEnabled && <button className="advance" onClick={() => setApiLimitEnabled(true)}>ADD API REQUEST LIMIT</button>}
-        <div className="metrics traffic-metrics">
-          <Metric label="MAX BACKLOG" value={result ? `${result.maxBacklog} jobs` : "—"} />
-          <Metric label="DROPPED" value={result ? `${result.dropped} jobs` : "—"} tone={result?.dropped ? "red" : result ? "green" : ""} />
-          <Metric label="AVG LATENCY" value={result ? `${result.averageLatencyMs} ms` : "—"} />
-        </div>
+      <MissionControlPanel title="Where do jobs wait?" description="The API can receive this burst, but a worker cannot start another job until it finishes the current one. Preserve every job while work drains." objectives={objectives} objectivesLabel="Traffic Spike objectives">
+        <div className="goal"><span>SUCCESS CRITERIA</span><b>Every accepted job is retained and eventually completed.</b></div>
       </MissionControlPanel>
     </section>
-    <footer><span>LIVE TIMELINE</span><p>{running ? "00:01 — Burst entering API…" : result ? result.unansweredRequests ? `00:01 — Client received no response for ${result.unansweredRequests} requests` : `00:01 — Client received ${result.acceptedResponses} accepted${result.rejectedResponses ? ` · ${result.rejectedResponses} rejected` : ""} · 00:10 — ${result.processed} jobs processed` : "00:00 — Configure a design, then run the simulation."}</p><em>DETERMINISTIC SIMULATION · NO LLM REQUIRED</em></footer>
+    <footer><span>LIVE TIMELINE</span><p>{timeline}</p><em>DETERMINISTIC BROWSER SIMULATION · NO LLM REQUIRED</em></footer>
     {result && runReportOpen && <RunResultModal
       passed={result.passed}
       eyebrow="TRAFFIC SPIKE REPORT"
-      successTitle="Burst resolved"
-      failureTitle="Bottleneck detected"
+      successTitle="The burst is safely queued"
+      failureTitle="Waiting work is not protected"
       summary={result.feedback}
       highlightLabel={result.passed ? "SYSTEM STATUS" : "NEXT FIX"}
-      highlightValue={result.passed ? "Every request was accepted and protected from the burst." : result.feedback}
+      highlightValue={result.passed ? `${result.acceptedResponses} jobs accepted · ${formatDuration(result.drainDurationMs)} drain` : result.feedback}
       metrics={[
-        { label: "PROCESSED", value: `${result.processed} jobs` },
-        { label: "DROPPED", value: `${result.dropped} jobs`, tone: result.dropped ? "red" : "green" },
+        { label: "API INTAKE", value: `${API_BURST_CAPACITY} JOBS` },
         { label: "CLIENT RESPONSES", value: result.unansweredRequests ? "MISSING" : `${result.acceptedResponses} ACCEPTED${result.rejectedResponses ? ` · ${result.rejectedResponses} REJECTED` : ""}`, tone: result.unansweredRequests || result.rejectedResponses ? "red" : "green" },
+        { label: "PROCESSED", value: `${result.processed} jobs` },
         { label: "MAX BACKLOG", value: `${result.maxBacklog} jobs` },
-        { label: "AVG LATENCY", value: `${result.averageLatencyMs} ms` },
+        { label: "AVG LATENCY", value: formatDuration(result.averageLatencyMs) },
+        { label: "PEAK LATENCY", value: formatDuration(result.peakLatencyMs) },
       ]}
       actions={<><button className="run-result-action" onClick={saveSolution}>{saved ? "SAVED ✓" : "SAVE THIS SOLUTION"}</button>{result.passed ? <a className="run-result-action secondary" href="/">RETURN TO LEVEL SELECT →</a> : <button className="run-result-action secondary" onClick={() => setRunReportOpen(false)}>KEEP BUILDING</button>}</>}
       onClose={() => setRunReportOpen(false)}
     />}
-    {introOpen && <LevelIntroModal level="LEVEL 03" title="Absorb a traffic spike" problem="A sudden burst can reach workers faster than they can process jobs, causing dropped work or a blocked request path." approach="An API quickly hands work to a queue, which buffers the burst while workers drain jobs at a safe rate." sourceHref="https://github.com/donnemartin/system-design-primer#asynchronism" onClose={() => setIntroOpen(false)} />}
+    {introOpen && <LevelIntroModal level="LEVEL 02" title="Keep a burst from disappearing" problem="Five hundred jobs arrive together, but a worker can process only one job at a time. Sending the burst straight to that worker leaves most jobs with nowhere safe to wait." approach="Let the API acknowledge received jobs while a bounded queue retains the waiting work and workers drain it in the background." sourceHref="https://github.com/donnemartin/system-design-primer#asynchronism" onClose={() => setIntroOpen(false)} />}
   </main>;
-}
-
-function Metric({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
-  return <div className="metric"><span>{label}</span><b className={tone}>{value}</b></div>;
 }

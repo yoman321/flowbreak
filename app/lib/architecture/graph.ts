@@ -36,6 +36,20 @@ export class ArchitectureGraph {
     return this.edges.some((edge) => this.getNode(edge.source.nodeId)?.kind === sourceKind && this.getNode(edge.target.nodeId)?.kind === targetKind);
   }
 
+  hasKindPath(kinds: readonly NodeKind[]) {
+    if (kinds.length === 0) return false;
+
+    let candidates = this.nodes.filter((node) => node.kind === kinds[0]).map((node) => node.id);
+    for (const kind of kinds.slice(1)) {
+      candidates = candidates.flatMap((nodeId) => this.outgoing(nodeId)
+        .map((edge) => edge.target.nodeId)
+        .filter((nodeId) => this.getNode(nodeId)?.kind === kind));
+      if (candidates.length === 0) return false;
+    }
+
+    return true;
+  }
+
   edgePresentation(edge: GraphEdge): EdgePresentation {
     return this.getNode(edge.source.nodeId)?.kind === "api" && this.getNode(edge.target.nodeId)?.kind === "client"
       ? "response"
