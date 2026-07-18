@@ -59,21 +59,28 @@ Hello Interview simulates the *interview* — you assemble a design you already 
 
 Build **one level fully — intro, builder, simulation, evaluation, debrief, persistence, and polish — before starting the next.** A single polished level is a winning submission; three rough ones are not. Stop when time runs out.
 
-The root page is a level-selection panel. The first learning path stays focused on the **message queue** as a reusable system-design primitive. Level 00 is a challenge-free Mission Control practice board: it uses the same builder visual language as Traffic Spike, only offers Client, API request, Worker pool, and Database nodes, and includes a basic guided first-request flow. Each following level uses the guided component kit and deterministic engine, but adds a new constraint:
+The root page is a level-selection panel. The first learning path introduces one new system-design concept per level. Level 00 is a challenge-free Mission Control practice board: it uses the same builder visual language as later challenges, only offers Client, API request, Worker pool, and Database nodes, and includes a basic guided first-request flow. Each following level begins from the prior level's canonical winning graph and adds one constraint:
 
-0. **Tutorial** — a challenge-free Mission Control practice board for placing, moving, and connecting Client, API request, Worker pool, and Database nodes. It gives a basic, step-by-step first-request guide: complete `Client → API request → Database`, then freely experiment. A Worker pool remains available but is intentionally optional: the first request has no large asynchronous work to move off the API path.
+0. **Tutorial** — a challenge-free Mission Control practice board for placing, moving, and connecting Client, API request, Worker pool, and Database nodes. It gives a basic, step-by-step first-request guide: complete `Client → API request → Database` and `API request → Client`, then freely experiment. A Worker pool remains available but is intentionally optional: the first request has no large asynchronous work to move off the API path.
 
    Each newly placed Tutorial node opens a short explainer modal. The definitions are adapted from the relevant System Design Primer sections, clarify that node's role in the current flow, and include a direct source link with CC BY attribution.
 
-   Tutorial's **Run Flow** control sits in the canvas header, not Mission Control. It opens a report modal that validates whether one continuous `Client → API request → Database` path exists, reports the current node/connection facts, and clearly indicates whether the run is correct. It does not simulate traffic.
+   Every level uses the shared **Run Result** modal and shared canvas header. The header holds the Run control and, after a run, displays a small green check or red cross button that reopens the saved last-run result. Tutorial's Run Flow validates whether one continuous `Client → API request → Database` path exists; Traffic Spike opens the same component after its simulation. The modal presents factual pass/fail feedback, level-specific metrics, and the next action.
 
-   A correct level completion always prompts the learner onward: to the next available level when one exists, or back to level selection after the last available level. In the current path, Tutorial leads to Traffic Spike and Traffic Spike leads back to the main page.
-1. **Traffic spike** (flagship) — absorb a request burst without dropping jobs, then drain the backlog. Teaches backpressure and scaling workers.
-2. **Slow asynchronous work** — move expensive work off the request path to keep user-facing latency below target. Teaches decoupling and eventual completion.
-3. **Rate-limited external API** — buffer work and drain it without exceeding a partner API's safe rate. Teaches smoothing and controlled throughput.
-4. **Unreliable worker/service** — preserve jobs and recover from temporary failures with safe retries. Teaches durability and retry tradeoffs.
+   Mission Control always displays the complete high-level objective list. A checked objective can require several graph or setting changes, but its title never reveals the exact solution, numeric targets, or lower-level tasks needed to finish it.
 
-Do not add load balancer or caching levels in v1. Finish the traffic-spike level end-to-end first, then add the other queue levels only if time remains.
+   Every level first opens a shared Mission Briefing modal. It states the high-level problem and usual system-design approach before the learner interacts, without disclosing the level's exact graph solution.
+
+   All placed canvas nodes use one shared component. Hovering on a node for one second opens a small, System Design Primer-attributed card with its role, level-specific live setting, and current inbound/outbound connection counts. These cards intentionally do not show prior run results.
+
+   A correct level completion always prompts the learner onward: to the next available level when one exists, or back to level selection after the last available level. Tutorial leads to Background Delivery. Until Level 02 exists, Background Delivery returns to level selection after completion.
+1. **Background delivery** — reuse `Client → API` plus an explicit `API → Client` response, then add a Worker Pool that records delivery in the Database: `API → Worker → Database`. The API can answer `202 Accepted · request received` while follower delivery completes in the background. The scenario adapts the Primer's example of a post appearing before it reaches all followers. Teaches asynchronous work and eventual completion.
+2. **Direct capacity** (planned next) — reuse Background Delivery's winner without a queue. Ten simultaneous delivery jobs meet only three direct-work slots per Worker node, so excess jobs drop until the learner adds enough workers. Teaches horizontal worker scaling.
+3. **Traffic spike** — reuse the Direct Capacity winner and introduce a Queue. A 100-request burst would require an impractical number of direct worker handoffs; `API → Queue → Workers` accepts the requests quickly and drains the delayed work. Teaches queue buffering and backpressure.
+4. **Rate-limited external API** — buffer work and drain it without exceeding a partner API's safe rate. Teaches smoothing and controlled throughput.
+5. **Unreliable worker/service** — preserve jobs and recover from temporary failures with safe retries. Teaches durability and retry tradeoffs.
+
+Do not add load balancer or caching levels in v1. Finish each level in the Background Delivery → Direct Capacity → Traffic Spike progression before adding later queue levels.
 
 ---
 
@@ -121,11 +128,15 @@ The simulation is real browser code, not the LLM pretending to be a simulator. T
 
 - Build a **guided architecture builder**, not a free-form whiteboard. Users place and connect a constrained component kit: **client/API, backend service, queue, worker pool, database, and external API**.
 - Architecture objects use direct manipulation: users drag components from the tray onto the canvas and drag canvas nodes to reposition them. Avoid click-only placement.
+- The builder shell is modular: every level composes shared left Component Tray, center Architecture Canvas, and right Mission Control modules. Those modules provide the pane structure while the level supplies its own graph state, simulation rules, and level-specific pane content.
+- The shared graph model uses an abstract `ArchitectureNode` class with concrete Client, API service, Queue, Worker pool, Database, and External API subclasses. Subclasses own ports, defaults, display metadata, and serializable attributes; one graph engine owns all directed port-to-port edges, exposes per-node incoming/outgoing adjacency, and is reused by every current and future builder level. React renders those node models through one shared graph canvas.
 - Each level canvas begins with the smallest connected setup necessary to run its scenario—nothing more and nothing less. The starter bottleneck may make the run pass or fail, but the graph must never be the level's optimized solution.
-- Connections are not components or standalone canvas objects. Users drag from any source component's output to any other component's input to create a directed edge, and click an edge to remove it; that source-to-target drag defines the data-flow direction used by graph validation and simulation routing.
+- Connections are not components or standalone canvas objects. Every node exposes draggable output and receiving input ports on all four sides, so users can start an edge and receive an edge from any direction. Click an edge to remove it; its source-to-target drag defines the data-flow direction used by graph validation and simulation routing.
+- Every client-originating request must have an explicit directed response flow back to that client. Responses are not draggable components: learners draw an API service output to the Client input, which renders as a distinct green return edge. For example, once an API hands asynchronous work to a worker, it can return `202 Accepted` to the client while the worker continues in the background. Level validation must fail request flows that leave the client without that return edge.
+- While dragging an existing canvas node, a bottom-canvas trash target appears. Dropping the node on it deletes that node and all of its attached connections; tray-item and connection drags never show the target.
 - The starter graph is the only preconnected setup. Every tray drop creates a distinct, unconnected component instance, and users may add any number of instances and connect them in any topology before running the level.
-- Traffic Spike teaches through progressive, checkable milestones: first build `Client → API → Queue → Workers → Database`, then use at least three workers to remove the worker bottleneck. Once that baseline works, learners may introduce an API intake limit (starting at 100 req/s) and must raise it to the burst rate to keep every request. Before that optional final constraint, the API accepts the full incoming burst.
-- The progress board reveals only the current milestone title. Do not reveal a solution topology, numeric target, or later milestone until the learner has unlocked it through play.
+- Background Delivery is implemented now as Level 01. It begins with `Client → API`, `API → Client`, and an unconnected Database; the learner adds a Worker Pool branch: `API → Worker → Database`. The API displays `202 Accepted · request received` once it has the fast request path and return edge; an 8-second follower-delivery task is completed by the worker after that acknowledgement. Mission Control keeps only learning guidance and objectives; the Run Result modal owns all acknowledgement and delivery metrics. The full high-level objective list is visible without exposing the solution graph.
+- Direct Capacity is the planned Level 02. It retains the API's direct-work handoff limit—three immediate jobs per Worker node, not an independent public API ingress limit—so adding workers increases the jobs that can begin immediately. Level 03 Traffic Spike retains this premise but makes the arrival burst large enough that queue buffering becomes the natural solution.
 - A solution is a validated graph of component types, settings, and directed connections. The simulation runs in the browser and models routing, capacity, queue backlog, retries, dropped work, latency, and downstream throttling.
 - Score the factual outcome, **not an expected topology**. Multiple designs and action sequences may succeed if they satisfy the level's measurable rules.
 - Each completed run records pass/fail, maximum backlog, dropped jobs, average and peak latency, processed jobs, retries, rate-limit violations, component utilization, and key timeline events.
@@ -145,12 +156,13 @@ User opens level → show static scenario intro (0 calls)
 
 ### Build order (protects the week)
 1. Build the **shared sandbox engine** once.
-2. Build the **traffic-spike queue level end-to-end**: builder, graph validation, simulation, scoring, persistence, static feedback, and optional debrief.
-3. Only then, if time remains, add the other three queue levels.
+2. Build **Background Delivery** end-to-end: builder, graph validation, deterministic browser simulation, scoring, and static feedback.
+3. Build **Direct Capacity**, then adapt that solved graph into **Traffic Spike** by introducing queue buffering.
+4. Only then, if time remains, add rate-limited external API and unreliable-worker levels.
 
 ### Current proof-of-concept status
 
-- The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides the Traffic Spike page, draggable nodes, worker and burst controls, metric feedback, and temporary `/api/simulate` and `/api/solutions` endpoints.
+- The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides Tutorial, the browser-only Background Delivery simulation, Traffic Spike, draggable nodes, metric feedback, and temporary `/api/simulate` and `/api/solutions` endpoints.
 - The current endpoints are placeholders, not the final architecture. Firebase Authentication/Firestore, richer graph validation, immutable persisted snapshots, and the shared browser-side tick simulation remain the next implementation work.
 - The prototype makes no LLM calls.
 
@@ -201,7 +213,7 @@ The main real cost is Codex usage **while building**, which is modest for a proj
 
 ## Next Step
 
-Scaffold the shared engine + the complete **traffic-spike queue level** as a working prototype: guided component builder, graph validation, deterministic simulation, outcome scoring, Mission Control visualization, Firebase-backed progress, static feedback, and an optional cached final debrief. Then extend it with the remaining queue levels.
+Build **Direct Capacity** next, then adapt its solved graph into the Level 03 **Traffic Spike** queue challenge. Continue toward shared browser-side simulation rules, Firebase-backed progress, static feedback, and an optional cached final debrief.
 
 ---
 
