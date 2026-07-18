@@ -20,4 +20,4 @@ Open [http://localhost:3000](http://localhost:3000). Add a queue, increase worke
 
 ## Attribution
 
-The project concept may reference the [System Design Primer](https://github.com/donnemartin/system-design-primer), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This prototype does not reproduce Primer content.
+Tutorial component explanations are adapted from the [System Design Primer](https://github.com/donnemartin/system-design-primer) by Donne Martin, licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Flowbreak links to the relevant Primer section for each explanation and has adapted the material for this interactive tutorial.

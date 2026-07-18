@@ -59,8 +59,15 @@ Hello Interview simulates the *interview* — you assemble a design you already 
 
 Build **one level fully — intro, builder, simulation, evaluation, debrief, persistence, and polish — before starting the next.** A single polished level is a winning submission; three rough ones are not. Stop when time runs out.
 
-The first learning path stays focused on the **message queue** as a reusable system-design primitive. Each level uses the same guided component kit and deterministic engine, but adds a new constraint:
+The root page is a level-selection panel. The first learning path stays focused on the **message queue** as a reusable system-design primitive. Level 00 is a challenge-free Mission Control practice board: it uses the same builder visual language as Traffic Spike, only offers Client, API request, Worker pool, and Database nodes, and includes a basic guided first-request flow. Each following level uses the guided component kit and deterministic engine, but adds a new constraint:
 
+0. **Tutorial** — a challenge-free Mission Control practice board for placing, moving, and connecting Client, API request, Worker pool, and Database nodes. It gives a basic, step-by-step first-request guide: complete `Client → API request → Database`, then freely experiment. A Worker pool remains available but is intentionally optional: the first request has no large asynchronous work to move off the API path.
+
+   Each newly placed Tutorial node opens a short explainer modal. The definitions are adapted from the relevant System Design Primer sections, clarify that node's role in the current flow, and include a direct source link with CC BY attribution.
+
+   Tutorial's **Run Flow** control sits in the canvas header, not Mission Control. It opens a report modal that validates whether one continuous `Client → API request → Database` path exists, reports the current node/connection facts, and clearly indicates whether the run is correct. It does not simulate traffic.
+
+   A correct level completion always prompts the learner onward: to the next available level when one exists, or back to level selection after the last available level. In the current path, Tutorial leads to Traffic Spike and Traffic Spike leads back to the main page.
 1. **Traffic spike** (flagship) — absorb a request burst without dropping jobs, then drain the backlog. Teaches backpressure and scaling workers.
 2. **Slow asynchronous work** — move expensive work off the request path to keep user-facing latency below target. Teaches decoupling and eventual completion.
 3. **Rate-limited external API** — buffer work and drain it without exceeding a partner API's safe rate. Teaches smoothing and controlled throughput.
@@ -114,7 +121,12 @@ The simulation is real browser code, not the LLM pretending to be a simulator. T
 
 - Build a **guided architecture builder**, not a free-form whiteboard. Users place and connect a constrained component kit: **client/API, backend service, queue, worker pool, database, and external API**.
 - Architecture objects use direct manipulation: users drag components from the tray onto the canvas and drag canvas nodes to reposition them. Avoid click-only placement.
-- A solution is a validated graph of component types, settings, and allowed directed connections. The simulation runs in the browser and models routing, capacity, queue backlog, retries, dropped work, latency, and downstream throttling.
+- Each level canvas begins with the smallest connected setup necessary to run its scenario—nothing more and nothing less. The starter bottleneck may make the run pass or fail, but the graph must never be the level's optimized solution.
+- Connections are not components or standalone canvas objects. Users drag from any source component's output to any other component's input to create a directed edge, and click an edge to remove it; that source-to-target drag defines the data-flow direction used by graph validation and simulation routing.
+- The starter graph is the only preconnected setup. Every tray drop creates a distinct, unconnected component instance, and users may add any number of instances and connect them in any topology before running the level.
+- Traffic Spike teaches through progressive, checkable milestones: first build `Client → API → Queue → Workers → Database`, then use at least three workers to remove the worker bottleneck. Once that baseline works, learners may introduce an API intake limit (starting at 100 req/s) and must raise it to the burst rate to keep every request. Before that optional final constraint, the API accepts the full incoming burst.
+- The progress board reveals only the current milestone title. Do not reveal a solution topology, numeric target, or later milestone until the learner has unlocked it through play.
+- A solution is a validated graph of component types, settings, and directed connections. The simulation runs in the browser and models routing, capacity, queue backlog, retries, dropped work, latency, and downstream throttling.
 - Score the factual outcome, **not an expected topology**. Multiple designs and action sequences may succeed if they satisfy the level's measurable rules.
 - Each completed run records pass/fail, maximum backlog, dropped jobs, average and peak latency, processed jobs, retries, rate-limit violations, component utilization, and key timeline events.
 - Use **Next.js** for the frontend and server routes; use **Firebase Authentication** and **Firestore** for accounts, user-owned drafts, completed solution snapshots, level progress, and cached debriefs. Restrict Firestore records to their owner with security rules.
@@ -139,7 +151,7 @@ User opens level → show static scenario intro (0 calls)
 ### Current proof-of-concept status
 
 - The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides the Traffic Spike page, draggable nodes, worker and burst controls, metric feedback, and temporary `/api/simulate` and `/api/solutions` endpoints.
-- The current endpoints are placeholders, not the final architecture. Firebase Authentication/Firestore, graph connections and validation, immutable persisted snapshots, and the shared browser-side tick simulation remain the next implementation work.
+- The current endpoints are placeholders, not the final architecture. Firebase Authentication/Firestore, richer graph validation, immutable persisted snapshots, and the shared browser-side tick simulation remain the next implementation work.
 - The prototype makes no LLM calls.
 
 ---
