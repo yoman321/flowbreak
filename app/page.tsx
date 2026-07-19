@@ -2,6 +2,7 @@ const levels = [
   { number: "00", title: "Tutorial", detail: "Build your first request flow.", href: "/tutorial", state: "AVAILABLE" },
   { number: "01", title: "Background Delivery", detail: "Keep slow follower delivery off the request path.", href: "/background-delivery", state: "AVAILABLE" },
   { number: "02", title: "Traffic Spike", detail: "Keep a burst safe while work drains.", href: "/traffic-spike", state: "AVAILABLE" },
+  { number: "03", title: "Load Balancing", detail: "Share a burst before one API reaches capacity.", href: "/load-balancing", state: "AVAILABLE" },
 ];
 
 export default function LevelSelect() {
@@ -16,7 +17,7 @@ export default function LevelSelect() {
           <p className="eyebrow">MISSION CONTROL · LEARNING PATH</p>
           <h1 id="level-select-title">Choose a flow<br />to break.</h1>
           <p className="select-lede">Build intuition by watching a system bend under pressure, then repair it one constraint at a time.</p>
-          <div className="launch-rule"><span>AVAILABLE NOW</span><b>03 levels</b></div>
+          <div className="launch-rule"><span>AVAILABLE NOW</span><b>04 levels</b></div>
         </div>
         <div className="level-cards">
           {levels.map((level) => <a key={level.number} className={`level-card level-${level.number}`} href={level.href}>

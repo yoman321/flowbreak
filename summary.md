@@ -76,10 +76,11 @@ The root page is a level-selection panel. The first learning path introduces one
    A correct level completion always prompts the learner onward: to the next available level when one exists, or back to level selection after the last available level. Tutorial leads to Background Delivery; learners can return to level selection to open Traffic Spike.
 1. **Background delivery** — reuse `Client → API` plus an explicit `API → Client` response, then add a Worker Pool that records delivery in the Database: `API → Worker → Database`. The API can answer `202 Accepted · request received` while follower delivery completes in the background. The scenario adapts the Primer's example of a post appearing before it reaches all followers. Teaches asynchronous work and eventual completion.
 2. **Traffic spike** — reuse Background Delivery's direct worker route and introduce a Queue. A fixed 500-job burst reaches the API, while each Worker Pool node processes only one job at a time. `API → Queue → Worker → Database` retains the waiting work, returns `202 Accepted` for the full burst, and drains it sequentially. Teaches queue buffering and backpressure.
-3. **Rate-limited external API** — buffer work and drain it without exceeding a partner API's safe rate. Teaches smoothing and controlled throughput.
-4. **Unreliable worker/service** — preserve jobs and recover from temporary failures with safe retries. Teaches durability and retry tradeoffs.
+3. **Load balancing** — reuse Traffic Spike's queue and worker route, but reduce each API service to a fixed 250-job intake capacity. A load balancer round-robins the fixed 500-job burst across API replicas; two complete API paths retain the full burst and return every response through the load balancer. Teaches request distribution and horizontal scaling.
+4. **Rate-limited external API** — buffer work and drain it without exceeding a partner API's safe rate. Teaches smoothing and controlled throughput. This is deferred until after the load-balancing level, if time remains.
+5. **Unreliable worker/service** — preserve jobs and recover from temporary failures with safe retries. Teaches durability and retry tradeoffs.
 
-Do not add load balancer or caching levels in v1. Finish each level in the Background Delivery → Traffic Spike progression before adding later queue levels.
+Do not add caching levels in v1. Finish each level in the Background Delivery → Traffic Spike → Load Balancing progression before adding later optional levels.
 
 ---
 
@@ -107,7 +108,7 @@ The simulation is real browser code, not the LLM pretending to be a simulator. T
 │          ▲              ▲              ▲                       │
 │          │              │              │  (each plugs its own  │
 │  ┌───────────┐  ┌──────────────┐  ┌─────────┐  rules into the │
-│  │Traffic Spike│ │ Async Work  │  │Rate Limit│ shared engine)  │
+│  │Traffic Spike│ │ Async Work  │  │Load Balance│ shared engine)│
 │  │   level    │  │  level      │  │  level   │                  │
 │  │ (rules +  │  │ (rules +     │  │(rules + │                  │
 │  │  visuals) │  │  visuals)    │  │ visuals)│                  │
@@ -128,15 +129,16 @@ The simulation is real browser code, not the LLM pretending to be a simulator. T
 - Build a **guided architecture builder**, not a free-form whiteboard. Users place and connect a constrained component kit: **client/API, backend service, queue, worker pool, database, and external API**.
 - Architecture objects use direct manipulation: users drag components from the tray onto the canvas and drag canvas nodes to reposition them. Avoid click-only placement.
 - The builder shell is modular: every level composes shared left Component Tray, center Architecture Canvas, and right Mission Control modules. Those modules provide the pane structure while the level supplies its own graph state, simulation rules, and level-specific pane content.
-- The shared graph model uses an abstract `ArchitectureNode` class with concrete Client, API service, Queue, Worker pool, Database, and External API subclasses. Subclasses own ports, defaults, display metadata, and serializable attributes; one graph engine owns all directed port-to-port edges, exposes per-node incoming/outgoing adjacency, and is reused by every current and future builder level. React renders those node models through one shared graph canvas.
+- The shared graph model uses an abstract `ArchitectureNode` class with concrete Client, Load Balancer, API service, Queue, Worker pool, Database, and External API subclasses. Subclasses own ports, defaults, display metadata, and serializable attributes; one graph engine owns all directed port-to-port edges, exposes per-node incoming/outgoing adjacency, and is reused by every current and future builder level. React renders those node models through one shared graph canvas.
 - The graph engine can also evaluate ordered directed kind paths, so a level can score whether work reaches the needed components without requiring one exact diagram layout. Level 02 uses this to recognize a complete API → Queue → Worker → Database route even when harmless extra edges remain.
 - Each level canvas begins with the smallest connected setup necessary to run its scenario—nothing more and nothing less. The starter bottleneck may make the run pass or fail, but the graph must never be the level's optimized solution.
 - Connections are not components or standalone canvas objects. Every node exposes draggable output and receiving input ports on all four sides, so users can start an edge and receive an edge from any direction. Click an edge to remove it; its source-to-target drag defines the data-flow direction used by graph validation and simulation routing.
-- Every client-originating request must have an explicit directed response flow back to that client. Responses are not draggable components: learners draw an API service output to the Client input, which renders as a distinct green return edge. For example, once an API hands asynchronous work to a worker, it can return `202 Accepted` to the client while the worker continues in the background. Level validation must fail request flows that leave the client without that return edge.
+- Every client-originating request must have an explicit directed response flow back to that client. Responses are not draggable components: learners draw an API service output to the Client input, or in the load-balancing level draw `API → Load Balancer → Client`; those return edges render green. For example, once an API hands asynchronous work to a worker, it can return `202 Accepted` to the client while the worker continues in the background. Level validation must fail request flows that leave the client without that return path.
 - While dragging an existing canvas node, a bottom-canvas trash target appears. Dropping the node on it deletes that node and all of its attached connections; tray-item and connection drags never show the target.
 - The starter graph is the only preconnected setup. Every tray drop creates a distinct, unconnected component instance, and users may add any number of instances and connect them in any topology before running the level.
 - Background Delivery is implemented now as Level 01. It begins with `Client → API`, `API → Client`, and an unconnected Database; the learner adds a Worker Pool branch: `API → Worker → Database`. The API displays `202 Accepted · request received` once it has the fast request path and return edge; an 8-second follower-delivery task is completed by the worker after that acknowledgement. Mission Control keeps only learning guidance and objectives; the Run Result modal owns all acknowledgement and delivery metrics. The full high-level objective list is visible without exposing the solution graph.
 - Traffic Spike is implemented as Level 02. The API receives a fixed 500-job burst, and the bounded queue also holds 500 jobs. Each Worker Pool node has one active-job slot and completes one job per simulated second. The starter direct path can begin only one job on its single worker and returns `503` for the other 499 because they have nowhere safe to wait. A complete queue path preserves all 500 jobs, returns `202 Accepted`, reaches a maximum waiting backlog of 499 with one worker, and drains in 500 simulated seconds. These fixed capacities are Flowbreak teaching rules; the Primer supports queues for decoupling producer and worker rates and bounded-queue back pressure, not these exact numbers.
+- Load Balancing is implemented as Level 03. It starts from Traffic Spike's complete queue path, but each API service can accept only 250 jobs from the fixed 500-job burst. The learner replaces the direct client/API return path with a load balancer, connects at least two complete `Load Balancer → API → Queue → Worker → Database` routes, and returns each API response through that load balancer. The deterministic round-robin rule sends 250 jobs to each of two API replicas; all 500 are queued, receive `202 Accepted`, and drain through the existing worker path. The figures and round-robin policy are Flowbreak teaching rules; the Primer supports load balancing across computing resources and horizontal scaling, not these exact settings.
 - A solution is a validated graph of component types, settings, and directed connections. The simulation runs in the browser and models routing, capacity, queue backlog, retries, dropped work, latency, and downstream throttling.
 - Score the factual outcome, **not an expected topology**. Multiple designs and action sequences may succeed if they satisfy the level's measurable rules.
 - Each completed run records pass/fail, maximum backlog, dropped jobs, average and peak latency, processed jobs, retries, rate-limit violations, component utilization, and key timeline events.
@@ -158,12 +160,13 @@ User opens level → show static scenario intro (0 calls)
 1. Build the **shared sandbox engine** once.
 2. Build **Background Delivery** end-to-end: builder, graph validation, deterministic browser simulation, scoring, and static feedback.
 3. Build **Traffic Spike** with queue buffering and serial workers.
-4. Only then, if time remains, add rate-limited external API and unreliable-worker levels.
+4. Build Load Balancing with API replicas and deterministic round-robin dispatch.
+5. Only then, if time remains, add rate-limited external API and unreliable-worker levels.
 
 ### Current proof-of-concept status
 
-- The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides Tutorial, browser-only Background Delivery and Traffic Spike simulations, draggable nodes, metric feedback, and a temporary `/api/solutions` endpoint.
-- Level 02's deterministic rules live in a dedicated browser-side simulation module with unit tests. It computes routing, serial worker capacity, accepted and rejected responses, bounded queue backlog, latency, and drain time without calling a server route. The former `/api/simulate` POC endpoint has been retired.
+- The initial Flowbreak scaffold is intentionally a lightweight, unauthenticated proof of concept: it provides Tutorial plus browser-only Background Delivery, Traffic Spike, and Load Balancing simulations, draggable nodes, metric feedback, and a temporary `/api/solutions` endpoint.
+- Levels 02 and 03 have dedicated browser-side simulation modules with unit tests. They compute routing, serial worker capacity, accepted and rejected responses, bounded queue backlog, latency, drain time, and Level 03's round-robin API distribution without calling a server route. The former `/api/simulate` POC endpoint has been retired.
 - Mission Control is intentionally free of live metric cards in every level. It presents the mission and objectives only; verified backlog, drops, latency, and related facts appear after a run in the shared Run Result modal.
 - The current persistence endpoint is a placeholder, not the final architecture. Firebase Authentication/Firestore, immutable persisted snapshots, and the shared browser-side tick simulation remain the next implementation work.
 - The prototype makes no LLM calls.
@@ -215,7 +218,7 @@ The main real cost is Codex usage **while building**, which is modest for a proj
 
 ## Next Step
 
-Build the next bounded-backpressure challenge only after the Level 02 Traffic Spike queue simulation is polished. Continue toward shared browser-side simulation rules, Firebase-backed progress, static feedback, and an optional cached final debrief.
+Polish the Level 03 Load Balancing simulation and its demo path. Continue toward Firebase-backed progress, static feedback, and an optional cached final debrief; rate-limited external APIs and unreliable services are later optional levels.
 
 ---
 

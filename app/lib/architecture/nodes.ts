@@ -1,4 +1,4 @@
-export type NodeKind = "client" | "api" | "queue" | "workers" | "db" | "external-api";
+export type NodeKind = "client" | "load-balancer" | "api" | "queue" | "workers" | "db" | "external-api";
 export type NodePosition = { left: number; top: number };
 export type NodeAttributes = { position: NodePosition; [attribute: string]: unknown };
 export type NodeSnapshot = { id: string; kind: NodeKind; attributes: NodeAttributes };
@@ -44,6 +44,11 @@ export class ApiServiceNode extends ArchitectureNode {
   readonly presentation = { icon: "◈", label: "API service", detail: "Accepts requests" };
 }
 
+export class LoadBalancerNode extends ArchitectureNode {
+  readonly kind = "load-balancer" as const;
+  readonly presentation = { icon: "⇄", label: "Load balancer", detail: "Distributes requests" };
+}
+
 export class QueueNode extends ArchitectureNode {
   readonly kind = "queue" as const;
   readonly presentation = { icon: "≋", label: "Queue", detail: "Buffers work" };
@@ -64,7 +69,7 @@ export class ExternalApiNode extends ArchitectureNode {
   readonly presentation = { icon: "↗", label: "External API", detail: "Calls a partner service" };
 }
 
-export const nodeKinds: readonly NodeKind[] = ["client", "api", "queue", "workers", "db", "external-api"];
+export const nodeKinds: readonly NodeKind[] = ["client", "load-balancer", "api", "queue", "workers", "db", "external-api"];
 
 export function isNodeKind(value: string): value is NodeKind {
   return nodeKinds.includes(value as NodeKind);
@@ -73,6 +78,7 @@ export function isNodeKind(value: string): value is NodeKind {
 export function createArchitectureNode(snapshot: NodeSnapshot): ArchitectureNode {
   switch (snapshot.kind) {
     case "client": return new ClientNode(snapshot.id, snapshot.attributes);
+    case "load-balancer": return new LoadBalancerNode(snapshot.id, snapshot.attributes);
     case "api": return new ApiServiceNode(snapshot.id, snapshot.attributes);
     case "queue": return new QueueNode(snapshot.id, snapshot.attributes);
     case "workers": return new WorkerPoolNode(snapshot.id, snapshot.attributes);

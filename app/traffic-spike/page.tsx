@@ -209,7 +209,7 @@ export default function TrafficSpike() {
         { label: "AVG LATENCY", value: formatDuration(result.averageLatencyMs) },
         { label: "PEAK LATENCY", value: formatDuration(result.peakLatencyMs) },
       ]}
-      actions={<><button className="run-result-action" onClick={saveSolution}>{saved ? "SAVED ✓" : "SAVE THIS SOLUTION"}</button>{result.passed ? <a className="run-result-action secondary" href="/">RETURN TO LEVEL SELECT →</a> : <button className="run-result-action secondary" onClick={() => setRunReportOpen(false)}>KEEP BUILDING</button>}</>}
+      actions={<><button className="run-result-action" onClick={saveSolution}>{saved ? "SAVED ✓" : "SAVE THIS SOLUTION"}</button>{result.passed ? <a className="run-result-action secondary" href="/load-balancing">CONTINUE TO LEVEL 03 · LOAD BALANCING →</a> : <button className="run-result-action secondary" onClick={() => setRunReportOpen(false)}>KEEP BUILDING</button>}</>}
       onClose={() => setRunReportOpen(false)}
     />}
     {introOpen && <LevelIntroModal level="LEVEL 02" title="Keep a burst from disappearing" problem="Five hundred jobs arrive together, but a worker can process only one job at a time. Sending the burst straight to that worker leaves most jobs with nowhere safe to wait." approach="Let the API acknowledge received jobs while a bounded queue retains the waiting work and workers drain it in the background." sourceHref="https://github.com/donnemartin/system-design-primer#asynchronism" onClose={() => setIntroOpen(false)} />}

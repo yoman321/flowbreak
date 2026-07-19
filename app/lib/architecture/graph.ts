@@ -51,7 +51,12 @@ export class ArchitectureGraph {
   }
 
   edgePresentation(edge: GraphEdge): EdgePresentation {
-    return this.getNode(edge.source.nodeId)?.kind === "api" && this.getNode(edge.target.nodeId)?.kind === "client"
+    const sourceKind = this.getNode(edge.source.nodeId)?.kind;
+    const targetKind = this.getNode(edge.target.nodeId)?.kind;
+
+    return (sourceKind === "api" && targetKind === "client")
+      || (sourceKind === "api" && targetKind === "load-balancer")
+      || (sourceKind === "load-balancer" && targetKind === "client")
       ? "response"
       : "flow";
   }

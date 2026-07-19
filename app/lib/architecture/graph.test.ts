@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ApiServiceNode, ClientNode, DatabaseNode } from "./nodes";
+import { ApiServiceNode, ClientNode, DatabaseNode, LoadBalancerNode } from "./nodes";
 import { ArchitectureGraph, createGraphSnapshot } from "./graph";
 
 function graphWithCoreNodes() {
   return new ArchitectureGraph(createGraphSnapshot([
     { id: "client-1", kind: "client", attributes: { position: { left: 5, top: 40 } } },
+    { id: "load-balancer-1", kind: "load-balancer", attributes: { position: { left: 20, top: 40 } } },
     { id: "api-1", kind: "api", attributes: { position: { left: 35, top: 40 } } },
     { id: "db-1", kind: "db", attributes: { position: { left: 65, top: 40 } } },
     { id: "workers-1", kind: "workers", attributes: { position: { left: 65, top: 65 } } },
@@ -16,6 +17,7 @@ describe("ArchitectureGraph", () => {
     const graph = graphWithCoreNodes();
 
     expect(graph.getNode("client-1")).toBeInstanceOf(ClientNode);
+    expect(graph.getNode("load-balancer-1")).toBeInstanceOf(LoadBalancerNode);
     expect(graph.getNode("api-1")).toBeInstanceOf(ApiServiceNode);
     expect(graph.getNode("db-1")).toBeInstanceOf(DatabaseNode);
     expect(graph.getNode("api-1")?.toSnapshot()).toEqual({
@@ -36,6 +38,15 @@ describe("ArchitectureGraph", () => {
     expect(graph.outgoing("api-1")).toHaveLength(3);
     expect(graph.incoming("client-1")).toHaveLength(1);
     expect(graph.hasKindConnection("api", "client")).toBe(true);
+    expect(graph.edgePresentation(graph.edges[1])).toBe("response");
+  });
+
+  it("marks direct and load-balanced return paths as response edges", () => {
+    const graph = graphWithCoreNodes()
+      .connect({ nodeId: "api-1", portId: "left-out" }, { nodeId: "load-balancer-1", portId: "right-in" })
+      .connect({ nodeId: "load-balancer-1", portId: "left-out" }, { nodeId: "client-1", portId: "right-in" });
+
+    expect(graph.edgePresentation(graph.edges[0])).toBe("response");
     expect(graph.edgePresentation(graph.edges[1])).toBe("response");
   });
 
